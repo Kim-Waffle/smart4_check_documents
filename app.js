@@ -15,7 +15,7 @@ const state = {
 const STATUS = {
   submitted: { label: "작성", color: "#2f8f63" },
   missing: { label: "미작성", color: "#c84f4f" },
-  early_employed: { label: "조기 취업", color: "#d99a2b" },
+  early_employed: { label: "취업", color: "#d99a2b" },
 };
 
 document.addEventListener("DOMContentLoaded", init);
@@ -129,7 +129,7 @@ function renderSummary() {
 
   [
     ["전체 학생", `${students.length}명`],
-    ["조기 취업", `${earlyCount}명`],
+    ["취업", `${earlyCount}명`],
     ["표시 그래프", `${getDocumentTypes().filter((type) => type.showChart).length}개`],
   ].forEach(([label, value]) => {
     const item = document.createElement("div");
@@ -242,7 +242,7 @@ function renderStudents() {
     button.addEventListener("click", () => openStudentModal(student.id));
 
     const badge = isEarlyEmployed(student)
-      ? `<span class="badge early">조기 취업</span>`
+      ? `<span class="badge early">취업</span>`
       : `<span class="badge ${overallSubmitted(student) ? "submitted" : "missing"}">${
           overallSubmitted(student) ? "작성 진행" : "미작성 포함"
         }</span>`;
@@ -312,7 +312,7 @@ function openStudentModal(studentId) {
     <div class="modal-actions">
       <a class="secondary-button" href="${student.folderUrl}" target="_blank" rel="noreferrer">학생 폴더 열기</a>
       <button class="primary-button" id="toggleEarly" type="button">${
-        early ? "조기 취업 해제" : "조기 취업으로 전환"
+        early ? "취업 해제" : "취업으로 전환"
       }</button>
     </div>
     <table class="detail-table">
