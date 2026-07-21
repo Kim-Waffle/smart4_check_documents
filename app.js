@@ -125,12 +125,13 @@ function renderSummary() {
   const summary = document.getElementById("summaryStrip");
   const students = getStudents();
   const earlyCount = students.filter(isEarlyEmployed).length;
+  const submittedCount = students.filter(overallSubmitted).length;
   summary.innerHTML = "";
 
   [
     ["전체 학생", `${students.length}명`],
+    ["작성", `${submittedCount}명`],
     ["취업", `${earlyCount}명`],
-    ["표시 그래프", `${getDocumentTypes().filter((type) => type.showChart).length}개`],
   ].forEach(([label, value]) => {
     const item = document.createElement("div");
     item.className = "summary-item";
