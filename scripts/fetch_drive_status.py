@@ -13,6 +13,7 @@ from googleapiclient.discovery import build
 
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut"
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.metadata.readonly"
 SEOUL = ZoneInfo("Asia/Seoul")
 
@@ -48,7 +49,7 @@ def drive_service():
 def list_children(service, parent_id: str, folders_only: bool | None = None) -> list[dict[str, Any]]:
     clauses = [f"'{parent_id}' in parents", "trashed = false"]
     if folders_only is True:
-        clauses.append(f"mimeType = '{FOLDER_MIME_TYPE}'")
+        clauses.append(f"(mimeType = '{FOLDER_MIME_TYPE}' or mimeType = '{SHORTCUT_MIME_TYPE}')")
     elif folders_only is False:
         clauses.append(f"mimeType != '{FOLDER_MIME_TYPE}'")
 
@@ -59,7 +60,11 @@ def list_children(service, parent_id: str, folders_only: bool | None = None) -> 
             service.files()
             .list(
                 q=" and ".join(clauses),
-                fields="nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink)",
+                fields=(
+                    "nextPageToken, "
+                    "files(id, name, mimeType, modifiedTime, webViewLink, "
+                    "shortcutDetails(targetId, targetMimeType))"
+                ),
                 orderBy="folder,name_natural",
                 pageSize=1000,
                 pageToken=page_token,
@@ -71,7 +76,23 @@ def list_children(service, parent_id: str, folders_only: bool | None = None) -> 
         items.extend(response.get("files", []))
         page_token = response.get("nextPageToken")
         if not page_token:
+            if folders_only is True:
+                return [item for item in items if is_folder_like(item)]
             return items
+
+
+def is_folder_like(item: dict[str, Any]) -> bool:
+    if item.get("mimeType") == FOLDER_MIME_TYPE:
+        return True
+    shortcut = item.get("shortcutDetails") or {}
+    return item.get("mimeType") == SHORTCUT_MIME_TYPE and shortcut.get("targetMimeType") == FOLDER_MIME_TYPE
+
+
+def effective_id(item: dict[str, Any] | None) -> str | None:
+    if not item:
+        return None
+    shortcut = item.get("shortcutDetails") or {}
+    return shortcut.get("targetId") or item.get("id")
 
 
 def drive_folder_url(folder_id: str | None) -> str | None:
@@ -89,10 +110,15 @@ def to_seoul_iso(value: str | None) -> str | None:
 
 
 def find_named_folder(folders: list[dict[str, Any]], folder_name: str) -> dict[str, Any] | None:
+    expected = normalize_name(folder_name)
     for folder in folders:
-        if folder["name"].strip() == folder_name:
+        if normalize_name(folder["name"]) == expected:
             return folder
     return None
+
+
+def normalize_name(value: str) -> str:
+    return " ".join(value.strip().split())
 
 
 def latest_file(files: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -114,15 +140,17 @@ def build_document_entry(service, student_folders: list[dict[str, Any]], doc_typ
             "latestModifiedAt": None,
         }
 
-    files = list_children(service, folder["id"], folders_only=False)
+    folder_id = effective_id(folder)
+    files = list_children(service, folder_id, folders_only=False) if folder_id else []
     latest = latest_file(files)
+    latest_id = effective_id(latest)
     return {
         "status": "submitted" if latest else "missing",
-        "folderId": folder["id"],
-        "folderUrl": drive_folder_url(folder["id"]),
+        "folderId": folder_id,
+        "folderUrl": drive_folder_url(folder_id),
         "latestFileName": latest["name"] if latest else None,
-        "latestFileId": latest["id"] if latest else None,
-        "latestFileUrl": drive_file_url(latest["id"]) if latest else None,
+        "latestFileId": latest_id if latest else None,
+        "latestFileUrl": drive_file_url(latest_id) if latest else None,
         "latestModifiedAt": to_seoul_iso(latest.get("modifiedTime")) if latest else None,
     }
 
@@ -135,17 +163,18 @@ def build_dashboard(config: dict[str, Any], manual_status: dict[str, Any]) -> di
 
     students = []
     for student_folder in sorted(student_folders, key=lambda item: item["name"]):
-        child_folders = list_children(service, student_folder["id"], folders_only=True)
+        student_folder_id = effective_id(student_folder)
+        child_folders = list_children(service, student_folder_id, folders_only=True) if student_folder_id else []
         documents = {
             doc_type["id"]: build_document_entry(service, child_folders, doc_type)
             for doc_type in config["documentTypes"]
         }
         students.append(
             {
-                "id": student_folder["id"],
+                "id": student_folder_id,
                 "name": student_folder["name"],
-                "studentStatus": "early_employed" if student_folder["id"] in early_ids else "active",
-                "folderUrl": drive_folder_url(student_folder["id"]),
+                "studentStatus": "early_employed" if student_folder_id in early_ids else "active",
+                "folderUrl": drive_folder_url(student_folder_id),
                 "documents": documents,
             }
         )
