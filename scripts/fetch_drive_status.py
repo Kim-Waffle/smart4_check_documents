@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -112,13 +113,15 @@ def to_seoul_iso(value: str | None) -> str | None:
 def find_named_folder(folders: list[dict[str, Any]], folder_name: str) -> dict[str, Any] | None:
     expected = normalize_name(folder_name)
     for folder in folders:
-        if normalize_name(folder["name"]) == expected:
+        actual = normalize_name(folder["name"])
+        if actual == expected or expected in actual:
             return folder
     return None
 
 
 def normalize_name(value: str) -> str:
-    return " ".join(value.strip().split())
+    normalized = " ".join(value.strip().split())
+    return re.sub(r"^\d+\s*[\.\)\]\-_:]+\s*", "", normalized)
 
 
 def latest_file(files: list[dict[str, Any]]) -> dict[str, Any] | None:
