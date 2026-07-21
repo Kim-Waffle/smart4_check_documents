@@ -12,6 +12,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   update-data:
@@ -42,3 +44,16 @@ jobs:
         with:
           commit_message: "Update dashboard data"
           file_pattern: "data/dashboard-data.json data/history/*.json"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."
+
+      - name: Deploy Pages
+        uses: actions/deploy-pages@v4
