@@ -125,12 +125,12 @@ function renderSummary() {
   const summary = document.getElementById("summaryStrip");
   const students = getStudents();
   const earlyCount = students.filter(isEarlyEmployed).length;
-  const submittedCount = students.filter(overallSubmitted).length;
+  const missingCount = students.filter((student) => !isEarlyEmployed(student) && !overallSubmitted(student)).length;
   summary.innerHTML = "";
 
   [
     ["전체 학생", `${students.length}명`],
-    ["작성", `${submittedCount}명`],
+    ["미작성", `${missingCount}명`],
     ["취업", `${earlyCount}명`],
   ].forEach(([label, value]) => {
     const item = document.createElement("div");
@@ -155,7 +155,6 @@ function renderCharts() {
       node.querySelector("h2").textContent = type.label;
       const canvas = node.querySelector("canvas");
       drawDoughnut(canvas, counts);
-      node.querySelector(".chart-percent").textContent = `작성 ${statusPercent(counts.submitted, students.length)}%`;
       renderLegend(node.querySelector(".legend"), counts, students.length);
       grid.appendChild(node);
     });
@@ -304,7 +303,9 @@ function latestTime(student) {
 }
 
 function overallSubmitted(student) {
-  return getDocumentTypes().some((type) => getDocStatus(student, type.id) === "submitted");
+  return getDocumentTypes()
+    .filter((type) => type.showChart)
+    .some((type) => getDocStatus(student, type.id) === "submitted");
 }
 
 function openStudentModal(studentId) {
