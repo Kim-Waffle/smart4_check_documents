@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-07-21T12:00:00+09:00",
+  "sourceFolderId": "1XGjLEPcehFm_aCgoxBlADyiji5gynQ9I",
+  "documentTypes": [
+    {
+      "id": "application",
+      "label": "입사지원서",
+      "folderName": "입사지원서",
+      "showChart": true
+    },
+    {
+      "id": "portfolio",
+      "label": "포트폴리오",
+      "folderName": "포트폴리오",
+      "showChart": true
+    },
+    {
+      "id": "interview",
+      "label": "면접자료",
+      "folderName": "면접자료",
+      "showChart": false
+    }
+  ],
+  "students": [
+    {
+      "id": "sample-student-folder-1",
+      "name": "샘플 학생 A",
+      "studentStatus": "active",
+      "folderUrl": "https://drive.google.com/drive/folders/sample-student-folder-1",
+      "documents": {
+        "application": {
+          "status": "submitted",
+          "folderId": "sample-application-folder-1",
+          "folderUrl": "https://drive.google.com/drive/folders/sample-application-folder-1",
+          "latestFileName": "입사지원서_샘플A.pdf",
+          "latestFileId": "sample-file-1",
+          "latestFileUrl": "https://drive.google.com/file/d/sample-file-1/view",
+          "latestModifiedAt": "2026-07-21T09:30:00+09:00"
+        },
+        "portfolio": {
+          "status": "missing",
+          "folderId": "sample-portfolio-folder-1",
+          "folderUrl": "https://drive.google.com/drive/folders/sample-portfolio-folder-1",
+          "latestFileName": null,
+          "latestFileId": null,
+          "latestFileUrl": null,
+          "latestModifiedAt": null
+        },
+        "interview": {
+          "status": "missing",
+          "folderId": "sample-interview-folder-1",
+          "folderUrl": "https://drive.google.com/drive/folders/sample-interview-folder-1",
+          "latestFileName": null,
+          "latestFileId": null,
+          "latestFileUrl": null,
+          "latestModifiedAt": null
+        }
+      }
+    },
+    {
+      "id": "sample-student-folder-2",
+      "name": "샘플 학생 B",
+      "studentStatus": "early_employed",
+      "folderUrl": "https://drive.google.com/drive/folders/sample-student-folder-2",
+      "documents": {
+        "application": {
+          "status": "missing",
+          "folderId": "sample-application-folder-2",
+          "folderUrl": "https://drive.google.com/drive/folders/sample-application-folder-2",
+          "latestFileName": null,
+          "latestFileId": null,
+          "latestFileUrl": null,
+          "latestModifiedAt": null
+        },
+        "portfolio": {
+          "status": "submitted",
+          "folderId": "sample-portfolio-folder-2",
+          "folderUrl": "https://drive.google.com/drive/folders/sample-portfolio-folder-2",
+          "latestFileName": "포트폴리오_샘플B.pptx",
+          "latestFileId": "sample-file-2",
+          "latestFileUrl": "https://drive.google.com/file/d/sample-file-2/view",
+          "latestModifiedAt": "2026-07-20T17:10:00+09:00"
+        },
+        "interview": {
+          "status": "submitted",
+          "folderId": "sample-interview-folder-2",
+          "folderUrl": "https://drive.google.com/drive/folders/sample-interview-folder-2",
+          "latestFileName": "면접질문_샘플B.docx",
+          "latestFileId": "sample-file-3",
+          "latestFileUrl": "https://drive.google.com/file/d/sample-file-3/view",
+          "latestModifiedAt": "2026-07-19T11:00:00+09:00"
+        }
+      }
+    }
+  ]
+}

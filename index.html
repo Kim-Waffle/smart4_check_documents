@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>취업서류 준비 현황</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">SMART 4</p>
+        <h1>취업서류 준비 현황</h1>
+      </div>
+      <div class="meta-panel">
+        <span>마지막 갱신</span>
+        <strong id="generatedAt">-</strong>
+      </div>
+    </header>
+
+    <main>
+      <section class="summary-strip" id="summaryStrip" aria-label="전체 요약"></section>
+      <section class="charts-grid" id="chartsGrid" aria-label="문서 작성 비율"></section>
+
+      <section class="toolbar" aria-label="학생 검색 및 필터">
+        <label class="field">
+          <span>이름 검색</span>
+          <input id="searchInput" type="search" placeholder="학생 이름" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>문서 유형</span>
+          <select id="typeFilter"></select>
+        </label>
+        <label class="field">
+          <span>작성 상태</span>
+          <select id="statusFilter">
+            <option value="all">전체</option>
+            <option value="submitted">작성</option>
+            <option value="missing">미작성</option>
+            <option value="early_employed">조기 취업</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>정렬</span>
+          <select id="sortSelect">
+            <option value="name_asc">이름 오름차순</option>
+            <option value="name_desc">이름 내림차순</option>
+            <option value="recent_desc">최근 수정일 최신순</option>
+            <option value="recent_asc">최근 수정일 오래된순</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="students-grid" id="studentsGrid" aria-label="학생별 현황"></section>
+    </main>
+
+    <div class="modal-backdrop" id="modalBackdrop" hidden>
+      <article class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <button class="icon-button close-button" id="closeModal" type="button" aria-label="닫기">
+          <span aria-hidden="true">x</span>
+        </button>
+        <div id="modalContent"></div>
+      </article>
+    </div>
+
+    <template id="chartTemplate">
+      <article class="chart-card">
+        <div>
+          <p class="chart-label"></p>
+          <h2></h2>
+        </div>
+        <canvas width="180" height="180"></canvas>
+        <dl class="legend"></dl>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
