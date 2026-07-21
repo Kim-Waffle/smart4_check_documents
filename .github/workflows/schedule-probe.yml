@@ -1,0 +1,13 @@
+name: Schedule probe
+
+on:
+  schedule:
+    - cron: "42 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print schedule probe time
+        run: date -u
