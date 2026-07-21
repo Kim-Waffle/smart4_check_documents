@@ -155,6 +155,7 @@ function renderCharts() {
       node.querySelector("h2").textContent = type.label;
       const canvas = node.querySelector("canvas");
       drawDoughnut(canvas, counts);
+      node.querySelector(".chart-percent").textContent = `작성 ${statusPercent(counts.submitted, students.length)}%`;
       renderLegend(node.querySelector(".legend"), counts, students.length);
       grid.appendChild(node);
     });
@@ -168,6 +169,10 @@ function countStatuses(students, typeId) {
     },
     { submitted: 0, missing: 0, early_employed: 0 }
   );
+}
+
+function statusPercent(count, total) {
+  return total ? Math.round((count / total) * 100) : 0;
 }
 
 function drawDoughnut(canvas, counts) {
@@ -204,7 +209,7 @@ function drawDoughnut(canvas, counts) {
   ctx.font = "700 24px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const percent = Math.round(((counts.submitted || 0) / total) * 100);
+  const percent = statusPercent(counts.submitted || 0, total);
   ctx.fillText(`${percent}%`, center, center - 8);
   ctx.fillStyle = "#69717c";
   ctx.font = "12px system-ui, sans-serif";
@@ -245,7 +250,7 @@ function renderStudents() {
     const badge = isEarlyEmployed(student)
       ? `<span class="badge early">취업</span>`
       : `<span class="badge ${overallSubmitted(student) ? "submitted" : "missing"}">${
-          overallSubmitted(student) ? "작성 진행" : "미작성 포함"
+          overallSubmitted(student) ? "작성중" : "미작성"
         }</span>`;
 
     button.innerHTML = `

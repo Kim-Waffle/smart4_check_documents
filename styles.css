@@ -140,6 +140,13 @@ main {
   font-size: 22px;
 }
 
+.chart-percent {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+}
+
 .legend {
   grid-column: 1 / -1;
   display: grid;
@@ -311,12 +318,17 @@ button:focus-visible {
 }
 
 .icon-button {
-  width: 36px;
-  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
 }
 
 .modal h2 {
