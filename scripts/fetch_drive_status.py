@@ -157,6 +157,7 @@ def build_document_entry(service, student_folders: list[dict[str, Any]], doc_typ
 
 def build_dashboard(config: dict[str, Any], manual_status: dict[str, Any]) -> dict[str, Any]:
     root_folder_id = os.getenv("GOOGLE_DRIVE_ROOT_FOLDER_ID") or config["sourceFolderId"]
+    debug_student_name = os.getenv("DEBUG_STUDENT_NAME", "").strip()
     service = drive_service()
     student_folders = list_children(service, root_folder_id, folders_only=True)
     early_ids = set(manual_status.get("earlyEmployedStudentIds", []))
@@ -164,7 +165,10 @@ def build_dashboard(config: dict[str, Any], manual_status: dict[str, Any]) -> di
     students = []
     for student_folder in sorted(student_folders, key=lambda item: item["name"]):
         student_folder_id = effective_id(student_folder)
-        child_folders = list_children(service, student_folder_id, folders_only=True) if student_folder_id else []
+        child_items = list_children(service, student_folder_id, folders_only=None) if student_folder_id else []
+        child_folders = [item for item in child_items if is_folder_like(item)]
+        if debug_student_name and debug_student_name in student_folder["name"]:
+            print_drive_diagnostics(service, student_folder, student_folder_id, child_items, config["documentTypes"])
         documents = {
             doc_type["id"]: build_document_entry(service, child_folders, doc_type)
             for doc_type in config["documentTypes"]
@@ -185,6 +189,48 @@ def build_dashboard(config: dict[str, Any], manual_status: dict[str, Any]) -> di
         "documentTypes": config["documentTypes"],
         "students": students,
     }
+
+
+def print_drive_diagnostics(
+    service,
+    student_folder: dict[str, Any],
+    student_folder_id: str | None,
+    child_items: list[dict[str, Any]],
+    document_types: list[dict[str, Any]],
+) -> None:
+    print(f"DEBUG student: {student_folder['name']} ({student_folder_id})")
+    print(f"DEBUG child item count: {len(child_items)}")
+    for item in child_items:
+        shortcut = item.get("shortcutDetails") or {}
+        target = shortcut.get("targetId", "")
+        target_mime = shortcut.get("targetMimeType", "")
+        print(
+            "DEBUG child:"
+            f" name={item.get('name')!r}"
+            f" id={item.get('id')}"
+            f" effective_id={effective_id(item)}"
+            f" mimeType={item.get('mimeType')}"
+            f" targetId={target}"
+            f" targetMimeType={target_mime}"
+        )
+
+    child_folders = [item for item in child_items if is_folder_like(item)]
+    for doc_type in document_types:
+        folder = find_named_folder(child_folders, doc_type["folderName"])
+        folder_id = effective_id(folder)
+        if not folder_id:
+            print(f"DEBUG document folder not found: {doc_type['folderName']!r}")
+            continue
+        files = list_children(service, folder_id, folders_only=False)
+        print(f"DEBUG document folder: {doc_type['folderName']!r} ({folder_id}) file_count={len(files)}")
+        for file in files[:20]:
+            print(
+                "DEBUG file:"
+                f" name={file.get('name')!r}"
+                f" id={effective_id(file)}"
+                f" mimeType={file.get('mimeType')}"
+                f" modifiedTime={file.get('modifiedTime')}"
+            )
 
 
 def main() -> None:
