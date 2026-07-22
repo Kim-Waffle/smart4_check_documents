@@ -17,7 +17,7 @@
       "id": "interview",
       "label": "면접자료",
       "folderName": "면접자료",
-      "showChart": false
+      "showChart": true
     }
   ]
 }
