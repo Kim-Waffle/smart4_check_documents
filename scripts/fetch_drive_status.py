@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,11 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut"
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.metadata.readonly"
 SEOUL = ZoneInfo("Asia/Seoul")
+INTERVIEW_DOCUMENT_ID = "interview"
+ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\ufeff]")
+ORDER_PREFIX_RE = re.compile(r"^\s*\d+\s*[\.\)\]\-_:]+\s*")
+NUMBERED_STUDENT_FOLDER_RE = re.compile(r"^\s*\d+\s*[\.\)\]\-_:]+\s*(.+?)\s*$")
+TRAILING_ANNOTATION_RE = re.compile(r"\s*[\(\[\{][^()\[\]{}]+[\)\]\}]\s*$")
 
 
 def load_json(path: Path, default: Any) -> Any:
@@ -110,6 +116,29 @@ def to_seoul_iso(value: str | None) -> str | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(SEOUL).isoformat()
 
 
+def normalize_spaces(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value))
+    normalized = ZERO_WIDTH_RE.sub("", normalized)
+    return " ".join(normalized.strip().split())
+
+
+def normalize_name(value: str) -> str:
+    return ORDER_PREFIX_RE.sub("", normalize_spaces(value))
+
+
+def normalize_student_match_key(value: str) -> str:
+    return normalize_spaces(value).casefold()
+
+
+def extract_interview_student_name(folder_name: str) -> str | None:
+    match = NUMBERED_STUDENT_FOLDER_RE.match(normalize_spaces(folder_name))
+    return normalize_spaces(match.group(1)) if match else None
+
+
+def strip_trailing_annotation(value: str) -> str:
+    return normalize_spaces(TRAILING_ANNOTATION_RE.sub("", value))
+
+
 def find_named_folder(folders: list[dict[str, Any]], folder_name: str) -> dict[str, Any] | None:
     expected = normalize_name(folder_name)
     for folder in folders:
@@ -119,33 +148,33 @@ def find_named_folder(folders: list[dict[str, Any]], folder_name: str) -> dict[s
     return None
 
 
-def normalize_name(value: str) -> str:
-    normalized = " ".join(value.strip().split())
-    return re.sub(r"^\d+\s*[\.\)\]\-_:]+\s*", "", normalized)
-
-
 def latest_file(files: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not files:
         return None
     return max(files, key=lambda item: item.get("modifiedTime") or "")
 
 
+def empty_document_entry(status: str) -> dict[str, Any]:
+    return {
+        "status": status,
+        "folderId": None,
+        "folderUrl": None,
+        "latestFileName": None,
+        "latestFileId": None,
+        "latestFileUrl": None,
+        "latestModifiedAt": None,
+    }
+
+
 def build_document_entry(service, student_folders: list[dict[str, Any]], doc_type: dict[str, Any]) -> dict[str, Any]:
     folder = find_named_folder(student_folders, doc_type["folderName"])
     if not folder:
-        return {
-            "status": "missing",
-            "folderId": None,
-            "folderUrl": None,
-            "latestFileName": None,
-            "latestFileId": None,
-            "latestFileUrl": None,
-            "latestModifiedAt": None,
-        }
+        return empty_document_entry("missing")
 
     folder_id = effective_id(folder)
     files = list_children(service, folder_id, folders_only=False) if folder_id else []
-    latest = latest_file(files)
+    valid_files = [item for item in files if not is_folder_like(item)]
+    latest = latest_file(valid_files)
     latest_id = effective_id(latest)
     return {
         "status": "submitted" if latest else "missing",
@@ -158,24 +187,182 @@ def build_document_entry(service, student_folders: list[dict[str, Any]], doc_typ
     }
 
 
+def build_interview_entry(service, interview_folder: dict[str, Any] | None) -> dict[str, Any]:
+    if not interview_folder:
+        return empty_document_entry("not_applicable")
+
+    folder_id = effective_id(interview_folder)
+    files = list_children(service, folder_id, folders_only=False) if folder_id else []
+    valid_files = [item for item in files if not is_folder_like(item)]
+    latest = latest_file(valid_files)
+    latest_id = effective_id(latest)
+    return {
+        "status": "submitted" if latest else "missing",
+        "folderId": folder_id,
+        "folderUrl": drive_folder_url(folder_id),
+        "latestFileName": latest["name"] if latest else None,
+        "latestFileId": latest_id if latest else None,
+        "latestFileUrl": drive_file_url(latest_id) if latest else None,
+        "latestModifiedAt": to_seoul_iso(latest.get("modifiedTime")) if latest else None,
+    }
+
+
+def build_alias_map(raw_aliases: dict[str, str], student_keys: set[str]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for source_name, target_name in raw_aliases.items():
+        source_key = normalize_student_match_key(source_name)
+        target_key = normalize_student_match_key(target_name)
+        if target_key not in student_keys:
+            raise RuntimeError(
+                f"Interview name alias target does not exist in the dashboard student list: "
+                f"{source_name!r} -> {target_name!r}"
+            )
+        if source_key in aliases and aliases[source_key] != target_key:
+            raise RuntimeError(f"Conflicting interview aliases for {source_name!r}")
+        aliases[source_key] = target_key
+    return aliases
+
+
+def resolve_interview_student_key(
+    extracted_name: str,
+    student_keys: set[str],
+    aliases: dict[str, str],
+) -> tuple[str | None, str]:
+    exact_key = normalize_student_match_key(extracted_name)
+    if exact_key in student_keys:
+        return exact_key, "exact"
+    if exact_key in aliases:
+        return aliases[exact_key], "alias"
+
+    without_annotation = strip_trailing_annotation(extracted_name)
+    annotation_key = normalize_student_match_key(without_annotation)
+    if annotation_key != exact_key:
+        if annotation_key in student_keys:
+            return annotation_key, "trailing_annotation"
+        if annotation_key in aliases:
+            return aliases[annotation_key], "trailing_annotation_alias"
+
+    return None, "unmatched"
+
+
+def build_interview_folder_index(
+    service,
+    interview_root_id: str,
+    student_names: list[str],
+    raw_aliases: dict[str, str],
+) -> dict[str, dict[str, Any]]:
+    student_keys = [normalize_student_match_key(name) for name in student_names]
+    duplicate_student_keys = {key for key in student_keys if student_keys.count(key) > 1}
+    if duplicate_student_keys:
+        raise RuntimeError(
+            "Duplicate dashboard student names after normalization: " + ", ".join(sorted(duplicate_student_keys))
+        )
+
+    student_key_set = set(student_keys)
+    aliases = build_alias_map(raw_aliases, student_key_set)
+    resolved: dict[str, dict[str, Any]] = {}
+    duplicate_matches: set[str] = set()
+
+    team_folders = list_children(service, interview_root_id, folders_only=True)
+    for team_folder in sorted(team_folders, key=lambda item: item["name"]):
+        team_id = effective_id(team_folder)
+        if not team_id:
+            continue
+        children = list_children(service, team_id, folders_only=True)
+        for folder in children:
+            extracted_name = extract_interview_student_name(folder["name"])
+            if not extracted_name:
+                continue
+
+            student_key, resolution = resolve_interview_student_key(extracted_name, student_key_set, aliases)
+            if not student_key:
+                print(
+                    "WARNING unmatched interview student folder:"
+                    f" team={team_folder['name']!r} folder={folder['name']!r}"
+                )
+                continue
+
+            if resolution != "exact":
+                print(
+                    "INFO normalized interview student folder:"
+                    f" team={team_folder['name']!r} folder={folder['name']!r} rule={resolution}"
+                )
+
+            if student_key in resolved:
+                previous = resolved[student_key]
+                print(
+                    "WARNING duplicate interview student folders; marking the student as not applicable:"
+                    f" first={previous.get('name')!r} second={folder.get('name')!r}"
+                )
+                duplicate_matches.add(student_key)
+                continue
+
+            resolved[student_key] = folder
+
+    for student_key in duplicate_matches:
+        resolved.pop(student_key, None)
+
+    return resolved
+
+
 def build_dashboard(config: dict[str, Any], manual_status: dict[str, Any]) -> dict[str, Any]:
     root_folder_id = os.getenv("GOOGLE_DRIVE_ROOT_FOLDER_ID") or config["sourceFolderId"]
+    interview_root_id = (
+        os.getenv("GOOGLE_DRIVE_INTERVIEW_ROOT_FOLDER_ID")
+        or config.get("interviewSourceFolderId")
+    )
     debug_student_name = os.getenv("DEBUG_STUDENT_NAME", "").strip()
     service = drive_service()
     student_folders = list_children(service, root_folder_id, folders_only=True)
     early_ids = set(manual_status.get("earlyEmployedStudentIds", []))
+
+    interview_type = next(
+        (doc_type for doc_type in config["documentTypes"] if doc_type["id"] == INTERVIEW_DOCUMENT_ID),
+        None,
+    )
+    regular_document_types = [
+        doc_type for doc_type in config["documentTypes"] if doc_type["id"] != INTERVIEW_DOCUMENT_ID
+    ]
+
+    interview_folders: dict[str, dict[str, Any]] = {}
+    if interview_type:
+        if not interview_root_id:
+            raise RuntimeError(
+                "Missing interviewSourceFolderId in data/config.json or "
+                "GOOGLE_DRIVE_INTERVIEW_ROOT_FOLDER_ID environment variable."
+            )
+        interview_folders = build_interview_folder_index(
+            service,
+            interview_root_id,
+            [folder["name"] for folder in student_folders],
+            config.get("interviewNameAliases", {}),
+        )
 
     students = []
     for student_folder in sorted(student_folders, key=lambda item: item["name"]):
         student_folder_id = effective_id(student_folder)
         child_items = list_children(service, student_folder_id, folders_only=None) if student_folder_id else []
         child_folders = [item for item in child_items if is_folder_like(item)]
+        student_key = normalize_student_match_key(student_folder["name"])
+        interview_folder = interview_folders.get(student_key)
+
         if debug_student_name and debug_student_name in student_folder["name"]:
-            print_drive_diagnostics(service, student_folder, student_folder_id, child_items, config["documentTypes"])
+            print_drive_diagnostics(
+                service,
+                student_folder,
+                student_folder_id,
+                child_items,
+                regular_document_types,
+                interview_folder,
+            )
+
         documents = {
             doc_type["id"]: build_document_entry(service, child_folders, doc_type)
-            for doc_type in config["documentTypes"]
+            for doc_type in regular_document_types
         }
+        if interview_type:
+            documents[INTERVIEW_DOCUMENT_ID] = build_interview_entry(service, interview_folder)
+
         students.append(
             {
                 "id": student_folder_id,
@@ -189,6 +376,7 @@ def build_dashboard(config: dict[str, Any], manual_status: dict[str, Any]) -> di
     return {
         "generatedAt": datetime.now(SEOUL).isoformat(),
         "sourceFolderId": root_folder_id,
+        "interviewSourceFolderId": interview_root_id,
         "documentTypes": config["documentTypes"],
         "students": students,
     }
@@ -200,6 +388,7 @@ def print_drive_diagnostics(
     student_folder_id: str | None,
     child_items: list[dict[str, Any]],
     document_types: list[dict[str, Any]],
+    interview_folder: dict[str, Any] | None,
 ) -> None:
     print(f"DEBUG student: {student_folder['name']} ({student_folder_id})")
     print(f"DEBUG child item count: {len(child_items)}")
@@ -224,7 +413,11 @@ def print_drive_diagnostics(
         if not folder_id:
             print(f"DEBUG document folder not found: {doc_type['folderName']!r}")
             continue
-        files = list_children(service, folder_id, folders_only=False)
+        files = [
+            item
+            for item in list_children(service, folder_id, folders_only=False)
+            if not is_folder_like(item)
+        ]
         print(f"DEBUG document folder: {doc_type['folderName']!r} ({folder_id}) file_count={len(files)}")
         for file in files[:20]:
             print(
@@ -234,6 +427,29 @@ def print_drive_diagnostics(
                 f" mimeType={file.get('mimeType')}"
                 f" modifiedTime={file.get('modifiedTime')}"
             )
+
+    interview_folder_id = effective_id(interview_folder)
+    if not interview_folder_id:
+        print("DEBUG interview folder not assigned")
+        return
+
+    interview_files = [
+        item
+        for item in list_children(service, interview_folder_id, folders_only=False)
+        if not is_folder_like(item)
+    ]
+    print(
+        f"DEBUG interview folder: {interview_folder.get('name')!r} "
+        f"({interview_folder_id}) file_count={len(interview_files)}"
+    )
+    for file in interview_files[:20]:
+        print(
+            "DEBUG interview file:"
+            f" name={file.get('name')!r}"
+            f" id={effective_id(file)}"
+            f" mimeType={file.get('mimeType')}"
+            f" modifiedTime={file.get('modifiedTime')}"
+        )
 
 
 def main() -> None:
