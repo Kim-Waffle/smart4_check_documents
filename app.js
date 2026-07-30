@@ -16,7 +16,10 @@ const STATUS = {
   submitted: { label: "작성", color: "#2f8f63" },
   missing: { label: "미작성", color: "#c84f4f" },
   early_employed: { label: "취업", color: "#d99a2b" },
+  not_applicable: { label: "미대상", color: "#8a919a" },
 };
+
+const CHART_STATUS_KEYS = ["submitted", "missing", "early_employed"];
 
 document.addEventListener("DOMContentLoaded", init);
 
@@ -117,8 +120,10 @@ function isEarlyEmployed(student) {
 }
 
 function getDocStatus(student, typeId) {
+  const rawStatus = student.documents?.[typeId]?.status;
+  if (rawStatus === "not_applicable") return "not_applicable";
   if (isEarlyEmployed(student)) return "early_employed";
-  return student.documents?.[typeId]?.status === "submitted" ? "submitted" : "missing";
+  return rawStatus === "submitted" ? "submitted" : "missing";
 }
 
 function renderSummary() {
@@ -149,13 +154,19 @@ function renderCharts() {
   getDocumentTypes()
     .filter((type) => type.showChart)
     .forEach((type) => {
-      const counts = countStatuses(students, type.id);
+      const eligibleStudents = students.filter(
+        (student) => getDocStatus(student, type.id) !== "not_applicable"
+      );
+      const counts = countStatuses(eligibleStudents, type.id);
       const node = template.content.cloneNode(true);
-      node.querySelector(".chart-label").textContent = "전체 인원 기준";
+      node.querySelector(".chart-label").textContent =
+        type.id === "interview"
+          ? `대상 인원 ${eligibleStudents.length}명 기준`
+          : "전체 인원 기준";
       node.querySelector("h2").textContent = type.label;
       const canvas = node.querySelector("canvas");
       drawDoughnut(canvas, counts);
-      renderLegend(node.querySelector(".legend"), counts, students.length);
+      renderLegend(node.querySelector(".legend"), counts, eligibleStudents.length);
       grid.appendChild(node);
     });
 }
@@ -163,7 +174,8 @@ function renderCharts() {
 function countStatuses(students, typeId) {
   return students.reduce(
     (acc, student) => {
-      acc[getDocStatus(student, typeId)] += 1;
+      const status = getDocStatus(student, typeId);
+      if (CHART_STATUS_KEYS.includes(status)) acc[status] += 1;
       return acc;
     },
     { submitted: 0, missing: 0, early_employed: 0 }
@@ -176,7 +188,7 @@ function statusPercent(count, total) {
 
 function drawDoughnut(canvas, counts) {
   const ctx = canvas.getContext("2d");
-  const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const total = CHART_STATUS_KEYS.reduce((sum, key) => sum + (counts[key] || 0), 0);
   const center = canvas.width / 2;
   const radius = 76;
   let start = -Math.PI / 2;
@@ -191,7 +203,8 @@ function drawDoughnut(canvas, counts) {
     return;
   }
 
-  Object.entries(STATUS).forEach(([key, meta]) => {
+  CHART_STATUS_KEYS.forEach((key) => {
+    const meta = STATUS[key];
     const value = counts[key] || 0;
     if (!value) return;
     const angle = (value / total) * Math.PI * 2;
@@ -217,7 +230,8 @@ function drawDoughnut(canvas, counts) {
 
 function renderLegend(legend, counts, total) {
   legend.innerHTML = "";
-  Object.entries(STATUS).forEach(([key, meta]) => {
+  CHART_STATUS_KEYS.forEach((key) => {
+    const meta = STATUS[key];
     const count = counts[key] || 0;
     const percent = total ? Math.round((count / total) * 100) : 0;
     const row = document.createElement("div");
@@ -362,11 +376,14 @@ function renderDetailRow(student, type) {
   const fileLink = doc.latestFileUrl
     ? `<a href="${doc.latestFileUrl}" target="_blank" rel="noreferrer">${escapeHtml(doc.latestFileName)}</a>`
     : "-";
+  const badgeClass = status === "early_employed" ? "early" : status;
+  const badgeStyle =
+    status === "not_applicable" ? ' style="color:#555b63;background:#eceff1"' : "";
 
   return `
     <tr>
       <td>${folderLink}</td>
-      <td><span class="badge ${status === "early_employed" ? "early" : status}">${STATUS[status].label}</span></td>
+      <td><span class="badge ${badgeClass}"${badgeStyle}>${STATUS[status].label}</span></td>
       <td>${fileLink}</td>
       <td>${doc.latestModifiedAt ? formatDateTime(doc.latestModifiedAt) : "-"}</td>
     </tr>
